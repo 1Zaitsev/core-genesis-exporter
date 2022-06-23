@@ -11,139 +11,76 @@ import (
 )
 
 var (
-	AddressBLUNAVault           = "terra1cda4adzngjzcn8quvfu2229s8tedl5t306352x"
-	AddressCNLUNA               = "terra1u553zk43jd4rwzc53qrdrq4jc2p8rextyq09dj"
-	AddressNLUNA                = "terra10f2mt82kjnkxqj2gepgwl637u2w4ue2z5nhz5j"
-	AddressCNLUNAAutoCompounder = "terra1au4h305fn4w3zpka2ql59e0t70jnqzu4mj2txx"
-	AddressAnchorOverseer       = "terra1tmnqgvg567ypvsvk6rwsga3srp7e3lg6u0elp8"
+	AddressBATOMVaul = "terra1lh3h7l5vsul2pxlevraucwev42ar6kyx33u4c8"
+	AddressNATOM     = "terra1jtdc6zpf95tvh9peuaxwp3v0yqszcnwl8j5ade"
+
+	PsiNATOMPair = "terra1spcf4486jjn8678hstwqzeeudu98yp7pyyltnl"
+	LpToken      = "terra1pyavxxun3vuakqq0wyqft69l3zjns0q76wut7z"
+
+	AddressAnchorOverseer = "terra1tmnqgvg567ypvsvk6rwsga3srp7e3lg6u0elp8"
 )
 
-func ExportNexus(app *terra.TerraApp, fromLP util.SnapshotBalanceAggregateMap, bl util.Blacklist) (util.SnapshotBalanceAggregateMap, error) {
-	ctx := util.PrepCtx(app)
+func ExportNexus(app *terra.TerraApp) (util.SnapshotBalanceAggregateMap, error) {
+	var ctx context.Context = util.PrepCtx(app)
 	qs := util.PrepWasmQueryServer(app)
 
 	keeper := app.WasmKeeper
 
-	// get all cnLuna holders, unwrap to nLuna
-	var cnLunaHolderMap = make(util.BalanceMap)
-	if err := util.GetCW20AccountsAndBalances(ctx, keeper, AddressCNLUNA, cnLunaHolderMap); err != nil {
-		return nil, fmt.Errorf("failed to fetch cnLUNA holders: %v", err)
+	// get all LP token holders
+	var nAtomHolderMapFromLp = make(util.BalanceMap)
+	if err := util.GetCW20AccountsAndBalances(ctx, keeper, LpToken, nAtomHolderMapFromLp); err != nil {
+		return nil, fmt.Errorf("failed to fetch lp token holders; %v", err)
 	}
 
-	// get nLUNA balance of cnLuna Autocompounder
-	nLunaInAutocompounder, err := util.GetCW20Balance(ctx, qs, AddressNLUNA, AddressCNLUNAAutoCompounder)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch nLUNA balance in autocompounder: %v", err)
-	}
-
-	// get total cnLUNA supply
-	var cnLunaSupply struct {
+	var LPTokenSupply struct {
 		TotalSupply sdk.Int `json:"total_supply"`
 	}
 	if err := util.ContractQuery(ctx, qs, &wasmtypes.QueryContractStoreRequest{
-		ContractAddress: AddressCNLUNA,
+		ContractAddress: LpToken,
 		QueryMsg:        []byte("{\"token_info\":{}}"),
-	}, &cnLunaSupply); err != nil {
-		return nil, fmt.Errorf("failed to fetch cnLUNA supply")
+	}, &LPTokenSupply); err != nil {
+		return nil, fmt.Errorf("failed to fetch lp token total supply: %v", err)
 	}
 
-	// calc nLUNA <> cnLUNA ratio
-	ratio := sdk.NewDecFromInt(cnLunaSupply.TotalSupply).QuoInt(nLunaInAutocompounder)
-
-	// iterate over cnLuna holders, convert it to nLUNA
-	var nLunaHolderMap = make(util.BalanceMap)
-	for userAddr, cnLunaHolding := range cnLunaHolderMap {
-		nLunaHolderMap[userAddr] = ratio.MulInt(cnLunaHolding).TruncateInt()
+	var totalNAtomInLP struct {
+		Balance sdk.Int `json:"balance"`
+	}
+	query_string := fmt.Sprintf("{\"balance\":{%s}}", PsiNATOMPair)
+	if err := util.ContractQuery(ctx, qs, &wasmtypes.QueryContractStoreRequest{
+		ContractAddress: AddressNATOM,
+		QueryMsg:        []byte(query_string),
+	}, &totalNAtomInLP); err != nil {
+		return nil, fmt.Errorf("failed to fetch lp total nAtom amout: %v", err)
 	}
 
-	// iterate over nLuna holders, add it to nLunaHolderMap
-	// (bar pairs from dexes)
-	var nLunaHolderMapFlat = make(util.BalanceMap)
-	if err := util.GetCW20AccountsAndBalances(ctx, keeper, AddressNLUNA, nLunaHolderMapFlat); err != nil {
-		return nil, fmt.Errorf("failed to fetch nLUNA holder")
+	// todo: figure out how much bAsset was provided by lp token amount
+	// lp token balance/total supply = x
+	// pair nAsset balance * x;
+	for _, v := range nAtomHolderMapFromLp {
+		v = sdk.NewDecFromInt(v).QuoInt(LPTokenSupply.TotalSupply).MulInt(totalNAtomInLP.Balance).RoundInt()
+	}
+
+	// get all nAtom holders
+	var nAtomHolderMap = make(util.BalanceMap)
+	if err := util.GetCW20AccountsAndBalances(ctx, keeper, AddressNATOM, nAtomHolderMap); err != nil {
+		return nil, fmt.Errorf("failed to fetch nAtom holders: %v", err)
 	}
 
 	// merge holder maps + nLUNA holdings from LP
-	blacklist := bl.GetAddressesByDenomMap(util.DenomNLUNA)
-	nLunaHoldingsFromLP := fromLP.PickDenomIntoBalanceMap(util.DenomNLUNA)
-	mergednLunaHolderMap := util.MergeMaps(nLunaHolderMap, nLunaHolderMapFlat, nLunaHoldingsFromLP)
-
-	nAssetTobAssetRatio, err := getnAssetTobAssetRatio(ctx, qs)
-	if err != nil {
-		return nil, err
-	}
+	mergednAtomHolderMap := util.MergeMaps(nAtomHolderMap, nAtomHolderMapFromLp)
 
 	// iterate over merged nLUNA holder map, apply nLUNA -> bLUNA ratio
 	var finalBalance = make(util.SnapshotBalanceAggregateMap)
-	for userAddr, nLunaHolding := range mergednLunaHolderMap {
-
-		// bar blacklisted addresses (pairs, ...)
-		if _, exists := blacklist[userAddr]; exists {
-			continue
-		}
-
-		bLunaAmount := nAssetTobAssetRatio.MulInt(nLunaHolding)
+	for userAddr, nAtomHolding := range mergednAtomHolderMap {
 
 		// there can't be more than 1 holding -- this is fine
 		finalBalance[userAddr] = []util.SnapshotBalance{
 			{
-				Denom:   util.DenomBLUNA,
-				Balance: bLunaAmount.TruncateInt(),
+				Denom:   "natom",
+				Balance: nAtomHolding,
 			},
 		}
 	}
 
 	return finalBalance, nil
-}
-
-func getnAssetTobAssetRatio(ctx context.Context, qs wasmtypes.QueryServer) (sdk.Dec, error) {
-	// nLUNA -> bLUNA ratio
-	// get bLUNA held in collateral
-	var collaterals struct {
-		Collaterals [][2]string `json:"collaterals"`
-	}
-	if err := util.ContractQuery(ctx, qs, &wasmtypes.QueryContractStoreRequest{
-		ContractAddress: AddressAnchorOverseer,
-		QueryMsg:        []byte(fmt.Sprintf("{\"collaterals\":{\"borrower\":\"%s\"}}", AddressBLUNAVault)),
-	}, &collaterals); err != nil {
-		return sdk.Dec{}, fmt.Errorf("failed to fetch Nexus bLUNA vault collateral: %v", err)
-	}
-
-	bLUNAProvision, _ := sdk.NewIntFromString(collaterals.Collaterals[0][1])
-
-	// calc nAsset->bAsset ratio
-	var nLunaSupply struct {
-		TotalSupply sdk.Int `json:"total_supply"`
-	}
-	if err := util.ContractQuery(ctx, qs, &wasmtypes.QueryContractStoreRequest{
-		ContractAddress: AddressNLUNA,
-		QueryMsg:        []byte("{\"token_info\":{}}"),
-	}, &nLunaSupply); err != nil {
-		return sdk.Dec{}, fmt.Errorf("failed to fetch nLUNA total supply: %v", err)
-	}
-	nAssetTobAssetRatio := sdk.NewDecFromInt(bLUNAProvision).QuoInt(nLunaSupply.TotalSupply)
-	return nAssetTobAssetRatio, nil
-}
-
-func ResolveToBLuna(app *terra.TerraApp, snapshot util.SnapshotBalanceAggregateMap, bl util.Blacklist) error {
-	ctx := util.PrepCtx(app)
-	qs := util.PrepWasmQueryServer(app)
-
-	nAssetTobAssetRatio, err := getnAssetTobAssetRatio(ctx, qs)
-	if err != nil {
-		return err
-	}
-
-	for _, sbs := range snapshot {
-		for i, sb := range sbs {
-			if sb.Denom == util.DenomNLUNA {
-				sbs[i] = util.SnapshotBalance{
-					Denom:   util.DenomBLUNA,
-					Balance: nAssetTobAssetRatio.MulInt(sb.Balance).TruncateInt(),
-				}
-			}
-		}
-	}
-
-	return nil
 }
