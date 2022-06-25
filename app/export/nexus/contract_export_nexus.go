@@ -13,11 +13,11 @@ import (
 )
 
 var (
-	AddressBATOMVaul = "terra1lh3h7l5vsul2pxlevraucwev42ar6kyx33u4c8"
-	AddressNATOM     = "terra1jtdc6zpf95tvh9peuaxwp3v0yqszcnwl8j5ade"
+	AddressWASAVAXVaul = "terra1hn9rzu66s422rl9kg0a7j2yxdjef0szkqvy7ws"
+	AddressNAVAX       = "terra13k62n0285wj8ug0ngcgpf7dgnkzqeu279tz636"
 
-	PsiNATOMPair = "terra1spcf4486jjn8678hstwqzeeudu98yp7pyyltnl"
-	LpToken      = "terra1pyavxxun3vuakqq0wyqft69l3zjns0q76wut7z"
+	PsiNAVAXPair = "terra10usmg35qsa92fagh49np7phmhhr4ryhyl27749"
+	LpToken      = "terra1p3zj8tkzufw9szmm97taj7x6kkd0cy7k2mpdws"
 
 	AddressAnchorOverseer = "terra1tmnqgvg567ypvsvk6rwsga3srp7e3lg6u0elp8"
 )
@@ -30,13 +30,13 @@ func ExportNexus(app *terra.TerraApp, height int64) (util.SnapshotBalanceAggrega
 
 	//get all nAsset wallets with balances
 	var nAssetHolders = make(util.BalanceMap)
-	if err := getCW20Balances(ctx, keeper, AddressNATOM, nAssetHolders); err != nil {
+	if err := getCW20Balances(ctx, keeper, AddressNAVAX, nAssetHolders); err != nil {
 		return nil, fmt.Errorf("failed to fetch nasset token holders; %v", err)
 	}
 
 	// get all nAsset from astro LP
 	var nAssetFromLP = make(util.BalanceMap)
-	if err := getLPBalances(ctx, keeper, qs, LpToken, PsiNATOMPair, AddressNATOM, nAssetFromLP); err != nil {
+	if err := getLPBalances(ctx, keeper, qs, LpToken, PsiNAVAXPair, AddressNAVAX, nAssetFromLP); err != nil {
 		return nil, fmt.Errorf("failed to fetch nasset token holders from LP; %v", err)
 	}
 
