@@ -117,6 +117,11 @@ func PrepCtx(app *terra.TerraApp) context.Context {
 	return sdktypes.WrapSDKContext(ctx)
 }
 
+func PrepCtxByHeight(app *terra.TerraApp, height int64) context.Context {
+	ctx := app.NewContext(true, tmproto.Header{Height: height})
+	return sdktypes.WrapSDKContext(ctx)
+}
+
 func PrepWasmQueryServer(app *terra.TerraApp) wasmtypes.QueryServer {
 	return wasmkeeper.NewQuerier(app.WasmKeeper)
 }

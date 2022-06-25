@@ -22,8 +22,8 @@ var (
 	AddressAnchorOverseer = "terra1tmnqgvg567ypvsvk6rwsga3srp7e3lg6u0elp8"
 )
 
-func ExportNexus(app *terra.TerraApp) (util.SnapshotBalanceAggregateMap, error) {
-	var ctx context.Context = util.PrepCtx(app)
+func ExportNexus(app *terra.TerraApp, height int64) (util.SnapshotBalanceAggregateMap, error) {
+	var ctx context.Context = util.PrepCtxByHeight(app, height)
 	qs := util.PrepWasmQueryServer(app)
 
 	keeper := app.WasmKeeper
