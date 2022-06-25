@@ -10,8 +10,8 @@ import (
 	"github.com/spf13/cast"
 	"github.com/spf13/cobra"
 	tmcli "github.com/tendermint/tendermint/libs/cli"
-	tmtypes "github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/libs/log"
+	tmtypes "github.com/tendermint/tendermint/types"
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/cosmos/cosmos-sdk/baseapp"
@@ -271,7 +271,7 @@ func (a appCreator) appExport(
 	height = terraApp.LastBlockHeight() + 1
 
 	// run contracts first
-	bank := export.ExportContracts(terraApp)
+	bank := export.ExportContracts(terraApp, height)
 	bankDefaultGenesis := banktypes.DefaultGenesisState()
 	bankDefaultGenesis.Balances = bank
 
